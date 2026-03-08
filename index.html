@@ -1,0 +1,872 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8"/>
+<meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+<title>VOID STRIKER</title>
+<link href="https://fonts.googleapis.com/css2?family=Orbitron:wght@400;700;900&family=Share+Tech+Mono&display=swap" rel="stylesheet"/>
+<style>
+  *,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
+  body{
+    background:#000;
+    display:flex;flex-direction:column;
+    align-items:center;justify-content:center;
+    min-height:100vh;
+    font-family:'Orbitron',monospace;
+    overflow:hidden;user-select:none;
+  }
+  #wrap{position:relative;}
+  canvas{display:block;}
+
+  /* ── HUD ── */
+  #hud{
+    position:absolute;top:0;left:0;right:0;
+    display:flex;justify-content:space-between;align-items:center;
+    padding:10px 18px;pointer-events:none;z-index:10;
+  }
+  .hud-score{font-size:20px;color:#00FFCC;letter-spacing:3px;
+    text-shadow:0 0 10px #00FFCC,0 0 24px #00FFCC44;}
+  .hud-lives{display:flex;gap:6px;align-items:center;}
+  .hud-level{font-size:13px;color:#FF6EFF;letter-spacing:2px;
+    text-shadow:0 0 8px #FF6EFF;}
+
+  /* ── Overlay ── */
+  .overlay{
+    position:absolute;inset:0;
+    display:flex;flex-direction:column;align-items:center;justify-content:center;
+    background:rgba(0,0,0,0.82);backdrop-filter:blur(4px);
+    z-index:20;
+  }
+  .overlay.hidden{display:none;}
+  .ov-card{
+    border:1px solid #00FFCC44;border-radius:8px;
+    background:rgba(0,20,18,0.95);
+    padding:36px 52px;text-align:center;
+    box-shadow:0 0 0 1px #00FFCC22,inset 0 0 60px rgba(0,255,204,0.04),
+               0 0 60px rgba(0,255,204,0.12);
+    max-width:480px;
+  }
+  .ov-title{
+    font-size:48px;font-weight:900;letter-spacing:8px;
+    color:#00FFCC;line-height:1;
+    text-shadow:0 0 20px #00FFCC,0 0 50px #00FFCC66;
+    margin-bottom:6px;
+  }
+  .ov-sub{
+    font-family:'Share Tech Mono',monospace;
+    font-size:12px;color:rgba(255,255,255,0.45);
+    letter-spacing:2px;margin-bottom:24px;
+  }
+  .ov-score-big{
+    font-size:38px;color:#FF6EFF;letter-spacing:4px;
+    text-shadow:0 0 16px #FF6EFF;margin:6px 0 2px;
+  }
+  .ov-hi{font-size:13px;color:#555;letter-spacing:2px;margin-bottom:20px;
+    font-family:'Share Tech Mono',monospace;}
+
+  /* Controls reference */
+  .controls-grid{
+    display:grid;grid-template-columns:1fr 1fr;gap:8px 24px;
+    margin:16px 0 24px;text-align:left;
+  }
+  .ctrl-row{
+    font-family:'Share Tech Mono',monospace;font-size:11px;
+    color:rgba(255,255,255,0.45);letter-spacing:1px;
+  }
+  .ctrl-key{
+    display:inline-block;background:#0a1a18;border:1px solid #00FFCC44;
+    border-radius:3px;padding:1px 6px;color:#00FFCC;font-size:10px;
+    margin-right:4px;
+  }
+
+  .btn-play{
+    background:transparent;color:#00FFCC;
+    border:1px solid #00FFCC;border-radius:4px;
+    padding:12px 40px;
+    font-family:'Orbitron',monospace;font-size:16px;font-weight:700;
+    letter-spacing:4px;cursor:pointer;
+    box-shadow:0 0 20px #00FFCC44,inset 0 0 20px rgba(0,255,204,0.05);
+    transition:all .15s;
+  }
+  .btn-play:hover{
+    background:rgba(0,255,204,0.12);
+    box-shadow:0 0 30px #00FFCC88,inset 0 0 30px rgba(0,255,204,0.1);
+  }
+  .btn-play:active{transform:scale(.97);}
+
+  /* Level banner */
+  #level-banner{
+    position:absolute;top:50%;left:50%;
+    transform:translate(-50%,-50%);
+    font-size:28px;font-weight:900;letter-spacing:6px;
+    color:#FF6EFF;text-shadow:0 0 20px #FF6EFF;
+    pointer-events:none;z-index:15;opacity:0;
+    transition:opacity .3s;
+  }
+</style>
+</head>
+<body>
+<div id="wrap">
+  <canvas id="c"></canvas>
+
+  <!-- HUD -->
+  <div id="hud">
+    <div class="hud-score" id="score-disp">0</div>
+    <div class="hud-lives" id="lives-disp"></div>
+    <div class="hud-level" id="level-disp">LVL 1</div>
+  </div>
+
+  <!-- Level banner -->
+  <div id="level-banner"></div>
+
+  <!-- Start screen -->
+  <div class="overlay" id="screen-start">
+    <div class="ov-card">
+      <div class="ov-title">VOID<br>STRIKER</div>
+      <div class="ov-sub">DEEP SPACE COMBAT SIM · v1.0</div>
+      <div class="controls-grid">
+        <div class="ctrl-row"><span class="ctrl-key">↑↓←→</span> Mover</div>
+        <div class="ctrl-row"><span class="ctrl-key">SHIFT</span>+<span class="ctrl-key">←→</span> Rotar</div>
+        <div class="ctrl-row"><span class="ctrl-key">SPACE</span> Disparar</div>
+        <div class="ctrl-row"><span class="ctrl-key">Z</span> Disparo triple</div>
+      </div>
+      <button class="btn-play" id="btn-start">INICIAR</button>
+    </div>
+  </div>
+
+  <!-- Game Over -->
+  <div class="overlay hidden" id="screen-over">
+    <div class="ov-card">
+      <div class="ov-title" style="color:#FF6EFF;text-shadow:0 0 20px #FF6EFF;">GAME<br>OVER</div>
+      <div class="ov-score-big" id="final-score">0</div>
+      <div class="ov-hi">RECORD: <span id="final-hi">0</span></div>
+      <button class="btn-play" id="btn-restart" style="color:#FF6EFF;border-color:#FF6EFF;box-shadow:0 0 20px #FF6EFF44;">REINICIAR</button>
+    </div>
+  </div>
+</div>
+
+<script>
+// ════════════════════════════════════════════════════════
+//  CANVAS SETUP
+// ════════════════════════════════════════════════════════
+const canvas = document.getElementById('c');
+const ctx    = canvas.getContext('2d');
+const W = 900, H = 650;
+canvas.width = W; canvas.height = H;
+document.getElementById('wrap').style.width  = W+'px';
+document.getElementById('wrap').style.height = H+'px';
+
+// ════════════════════════════════════════════════════════
+//  CONSTANTS
+// ════════════════════════════════════════════════════════
+const SHIP_SPEED   = 4.2;
+const ROT_SPEED    = 0.055;     // radians per frame when SHIFT held
+const BULLET_SPD   = 11;
+const ENEMY_ROWS   = 4;
+const ENEMY_COLS   = 9;
+const ENEMY_W      = 54;
+const ENEMY_H      = 38;
+const ENEMY_PAD_X  = 18;
+const ENEMY_PAD_Y  = 22;
+
+// ════════════════════════════════════════════════════════
+//  STATE
+// ════════════════════════════════════════════════════════
+let state = 'start';
+let score = 0, hi = 0, lives = 3, level = 1;
+let frame = 0;
+let raf   = null;
+
+// ── Ship ──
+const ship = {
+  x: W/2, y: H - 90,
+  angle: -Math.PI/2,   // pointing up by default
+  w: 36, h: 42,
+  invincible: 0,
+  thrustAnim: 0,
+};
+
+// ── Input ──
+const keys = {};
+document.addEventListener('keydown', e => {
+  keys[e.code] = true;
+  if (e.code === 'Space') { e.preventDefault(); tryShoot(); }
+  if (e.code === 'KeyZ')  { e.preventDefault(); tryTripleShoot(); }
+  if (['ArrowUp','ArrowDown','ArrowLeft','ArrowRight'].includes(e.code)) e.preventDefault();
+});
+document.addEventListener('keyup', e => { keys[e.code] = false; });
+
+// ── Bullets / Enemies / FX ──
+let bullets     = [];
+let eBullets    = [];
+let enemies     = [];
+let explosions  = [];
+let stars       = [];
+let shootCd     = 0;
+let eStepper    = 0;   // enemy move ticker
+let eDir        = 1;   // 1=right -1=left
+let eDrop       = false;
+let eShootCd    = 0;
+let eSpeed      = 0;
+let eDescend    = 0;   // extra y offset from drops
+
+// ════════════════════════════════════════════════════════
+//  STARS (parallax 3 layers)
+// ════════════════════════════════════════════════════════
+function initStars() {
+  stars = [];
+  for (let i = 0; i < 220; i++) {
+    stars.push({
+      x: Math.random()*W, y: Math.random()*H,
+      r: Math.random()*1.6+0.2,
+      spd: 0.1 + Math.random()*0.5,
+      alpha: 0.2 + Math.random()*0.7,
+      twinkle: Math.random()*Math.PI*2,
+    });
+  }
+}
+
+// ════════════════════════════════════════════════════════
+//  ENEMY GRID
+// ════════════════════════════════════════════════════════
+function buildEnemies() {
+  enemies = [];
+  const startX = (W - (ENEMY_COLS*(ENEMY_W+ENEMY_PAD_X)))/2 + ENEMY_W/2;
+  const startY = 80;
+  for (let r = 0; r < ENEMY_ROWS; r++) {
+    for (let c = 0; c < ENEMY_COLS; c++) {
+      enemies.push({
+        x: startX + c*(ENEMY_W+ENEMY_PAD_X),
+        y: startY + r*(ENEMY_H+ENEMY_PAD_Y) + eDescend,
+        baseX: startX + c*(ENEMY_W+ENEMY_PAD_X),
+        baseY: startY + r*(ENEMY_H+ENEMY_PAD_Y),
+        row: r, col: c,
+        hp: r === 0 ? 2 : 1,
+        alive: true,
+        animPhase: Math.random()*Math.PI*2,
+        type: r === 0 ? 'elite' : r < 2 ? 'mid' : 'grunt',
+        hitFlash: 0,
+      });
+    }
+  }
+  eDir   = 1;
+  eStepper = 0;
+  eSpeed = 0.4 + level * 0.15;
+  eShootCd = 80;
+}
+
+// ════════════════════════════════════════════════════════
+//  RESET / START
+// ════════════════════════════════════════════════════════
+function resetGame() {
+  score = 0; lives = 3; level = 1; frame = 0;
+  bullets = []; eBullets = []; explosions = [];
+  shootCd = 0; eDescend = 0; eDrop = false;
+  ship.x = W/2; ship.y = H-90; ship.angle = -Math.PI/2;
+  ship.invincible = 0; ship.thrustAnim = 0;
+  initStars();
+  buildEnemies();
+  updateHUD();
+}
+
+function startGame() {
+  document.getElementById('screen-start').classList.add('hidden');
+  resetGame();
+  state = 'running';
+  if (raf) cancelAnimationFrame(raf);
+  loop();
+}
+
+function restartGame() {
+  document.getElementById('screen-over').classList.add('hidden');
+  resetGame();
+  state = 'running';
+  if (raf) cancelAnimationFrame(raf);
+  loop();
+}
+
+function gameOver() {
+  state = 'over';
+  if (score > hi) hi = score;
+  document.getElementById('final-score').textContent = score;
+  document.getElementById('final-hi').textContent = hi;
+  document.getElementById('screen-over').classList.remove('hidden');
+}
+
+function nextLevel() {
+  level++;
+  bullets = []; eBullets = [];
+  eDescend = 0; eDrop = false;
+  const banner = document.getElementById('level-banner');
+  banner.textContent = `— LEVEL ${level} —`;
+  banner.style.opacity = '1';
+  setTimeout(() => banner.style.opacity = '0', 1800);
+  buildEnemies();
+  updateHUD();
+}
+
+// ════════════════════════════════════════════════════════
+//  HUD
+// ════════════════════════════════════════════════════════
+function updateHUD() {
+  document.getElementById('score-disp').textContent = String(score).padStart(6,'0');
+  document.getElementById('level-disp').textContent = `LVL ${level}`;
+  // Lives as ship icons via canvas text
+  const el = document.getElementById('lives-disp');
+  el.innerHTML = '';
+  for (let i = 0; i < 3; i++) {
+    const s = document.createElement('span');
+    s.style.cssText = `font-size:18px;opacity:${i<lives?1:0.2};filter:${i<lives?'drop-shadow(0 0 6px #00FFCC)':''};`;
+    s.textContent = '△';
+    el.appendChild(s);
+  }
+}
+
+// ════════════════════════════════════════════════════════
+//  SHOOTING
+// ════════════════════════════════════════════════════════
+function tryShoot() {
+  if (state !== 'running' || shootCd > 0) return;
+  shootCd = 14;
+  const dx = Math.cos(ship.angle);
+  const dy = Math.sin(ship.angle);
+  bullets.push({
+    x: ship.x + dx*28, y: ship.y + dy*28,
+    vx: dx*BULLET_SPD, vy: dy*BULLET_SPD,
+    life: 120, triple: false,
+  });
+  spawnMuzzleFlash(ship.x + dx*28, ship.y + dy*28);
+}
+
+function tryTripleShoot() {
+  if (state !== 'running' || shootCd > 4) return;
+  shootCd = 18;
+  const spreads = [-0.22, 0, 0.22];
+  spreads.forEach(offset => {
+    const a = ship.angle + offset;
+    const dx = Math.cos(a), dy = Math.sin(a);
+    bullets.push({
+      x: ship.x + dx*28, y: ship.y + dy*28,
+      vx: dx*BULLET_SPD, vy: dy*BULLET_SPD,
+      life: 100, triple: true,
+    });
+  });
+  spawnMuzzleFlash(ship.x + Math.cos(ship.angle)*28, ship.y + Math.sin(ship.angle)*28);
+}
+
+function spawnMuzzleFlash(x, y) {
+  for (let i = 0; i < 6; i++) {
+    const a = ship.angle + (Math.random()-.5)*.8;
+    const s = 2 + Math.random()*4;
+    explosions.push({ x, y, vx:Math.cos(a)*s, vy:Math.sin(a)*s,
+      r:2+Math.random()*2, alpha:1, col:'#00FFCC', life:12, isMuzzle:true });
+  }
+}
+
+// ════════════════════════════════════════════════════════
+//  EXPLOSION
+// ════════════════════════════════════════════════════════
+function spawnExplosion(x, y, col, big = false) {
+  const n = big ? 22 : 12;
+  for (let i = 0; i < n; i++) {
+    const a = Math.random()*Math.PI*2;
+    const s = big ? 1+Math.random()*7 : 1+Math.random()*4;
+    explosions.push({
+      x, y,
+      vx: Math.cos(a)*s, vy: Math.sin(a)*s,
+      r: big ? 2+Math.random()*4 : 1.5+Math.random()*2.5,
+      alpha: 1, col, life: big ? 45 : 28,
+      isMuzzle: false,
+    });
+  }
+  // Ring flash
+  explosions.push({ x, y, vx:0, vy:0, r:0, alpha:1, col, life:20, isRing:true,
+    maxR: big ? 40 : 22 });
+}
+
+// ════════════════════════════════════════════════════════
+//  UPDATE
+// ════════════════════════════════════════════════════════
+function update() {
+  frame++;
+  if (shootCd > 0) shootCd--;
+
+  // ── Ship movement ──
+  const shiftHeld = keys['ShiftLeft'] || keys['ShiftRight'];
+
+  if (shiftHeld) {
+    // ROTATE mode
+    if (keys['ArrowLeft'])  ship.angle -= ROT_SPEED;
+    if (keys['ArrowRight']) ship.angle += ROT_SPEED;
+  } else {
+    // TRANSLATE mode
+    if (keys['ArrowLeft'])  ship.x -= SHIP_SPEED;
+    if (keys['ArrowRight']) ship.x += SHIP_SPEED;
+    if (keys['ArrowUp'])    ship.y -= SHIP_SPEED;
+    if (keys['ArrowDown'])  ship.y += SHIP_SPEED;
+  }
+
+  // Clamp
+  ship.x = Math.max(24, Math.min(W-24, ship.x));
+  ship.y = Math.max(24, Math.min(H-24, ship.y));
+
+  if (keys['ArrowUp'] || keys['ArrowDown'] || keys['ArrowLeft'] || keys['ArrowRight']) {
+    ship.thrustAnim += 0.35;
+  }
+
+  if (ship.invincible > 0) ship.invincible--;
+
+  // ── Enemy movement (galaga-style grid sweep) ──
+  const alive = enemies.filter(e => e.alive);
+  if (alive.length === 0) { nextLevel(); return; }
+
+  eStepper += eSpeed + level*0.04;
+  const offset = Math.sin(eStepper * 0.022) * (80 + level*8);
+
+  // Check if need to drop
+  let hitWall = false;
+  alive.forEach(e => {
+    const nx = e.baseX + offset + eDescend*0.3;
+    if (nx < 30 || nx > W-30) hitWall = true;
+  });
+
+  if (hitWall && !eDrop) {
+    eDrop = true;
+    eDescend += 22 + level*2;
+    eDir *= -1;
+  } else if (!hitWall) {
+    eDrop = false;
+  }
+
+  alive.forEach(e => {
+    e.animPhase += 0.04;
+    e.x = e.baseX + offset * eDir + eDescend*0.15;
+    e.y = e.baseY + eDescend + Math.sin(e.animPhase + e.col)*3;
+    if (e.hitFlash > 0) e.hitFlash--;
+    // Enemy reaches ship row → game over
+    if (e.y > H - 80) { gameOver(); return; }
+  });
+
+  // ── Enemy shooting ──
+  eShootCd--;
+  if (eShootCd <= 0) {
+    eShootCd = Math.max(25, 80 - level*8);
+    const shooters = alive.filter(e => e.alive);
+    if (shooters.length) {
+      // Prefer enemy closest to ship
+      shooters.sort((a,b)=>{
+        const da = Math.hypot(a.x-ship.x, a.y-ship.y);
+        const db = Math.hypot(b.x-ship.x, b.y-ship.y);
+        return da-db;
+      });
+      const shooter = shooters[0];
+      const ang = Math.atan2(ship.y - shooter.y, ship.x - shooter.x);
+      const spd = 3.5 + level*0.3;
+      eBullets.push({
+        x: shooter.x, y: shooter.y,
+        vx: Math.cos(ang)*spd, vy: Math.sin(ang)*spd,
+        life: 200,
+      });
+    }
+  }
+
+  // ── Move bullets ──
+  bullets.forEach(b => { b.x += b.vx; b.y += b.vy; b.life--; });
+  bullets = bullets.filter(b => b.life > 0 && b.x>-20 && b.x<W+20 && b.y>-20 && b.y<H+20);
+
+  eBullets.forEach(b => { b.x += b.vx; b.y += b.vy; b.life--; });
+  eBullets = eBullets.filter(b => b.life > 0);
+
+  // ── Bullet vs Enemy collision ──
+  for (let bi = bullets.length-1; bi >= 0; bi--) {
+    const b = bullets[bi];
+    for (let ei = enemies.length-1; ei >= 0; ei--) {
+      const e = enemies[ei];
+      if (!e.alive) continue;
+      if (Math.abs(b.x-e.x)<22 && Math.abs(b.y-e.y)<16) {
+        bullets.splice(bi, 1);
+        e.hp--;
+        e.hitFlash = 8;
+        if (e.hp <= 0) {
+          e.alive = false;
+          const pts = e.type==='elite'?150:e.type==='mid'?80:40;
+          score += pts * level;
+          const col = e.type==='elite'?'#FF6EFF':e.type==='mid'?'#FFD93D':'#00FFCC';
+          spawnExplosion(e.x, e.y, col, e.type==='elite');
+        } else {
+          spawnExplosion(e.x, e.y, '#FFF', false);
+        }
+        updateHUD();
+        break;
+      }
+    }
+  }
+
+  // ── Enemy bullet vs ship ──
+  if (ship.invincible <= 0) {
+    for (let bi = eBullets.length-1; bi >= 0; bi--) {
+      const b = eBullets[bi];
+      if (Math.hypot(b.x-ship.x, b.y-ship.y) < 18) {
+        eBullets.splice(bi, 1);
+        lives--;
+        ship.invincible = 140;
+        spawnExplosion(ship.x, ship.y, '#FF4444', true);
+        updateHUD();
+        if (lives <= 0) { gameOver(); return; }
+        break;
+      }
+    }
+  }
+
+  // ── Explosions / particles ──
+  explosions.forEach(p => {
+    if (p.isRing) {
+      p.r += p.maxR / p.life;
+      p.alpha -= 1/p.life * 1.5;
+    } else {
+      p.x += p.vx; p.y += p.vy;
+      p.vx *= 0.93; p.vy *= 0.93;
+      p.alpha -= 1/p.life;
+    }
+    p.life--;
+  });
+  explosions = explosions.filter(p => p.life > 0 && p.alpha > 0);
+
+  // ── Stars scroll ──
+  stars.forEach(s => {
+    s.y += s.spd; s.twinkle += 0.03;
+    if (s.y > H) { s.y = 0; s.x = Math.random()*W; }
+  });
+}
+
+// ════════════════════════════════════════════════════════
+//  DRAW
+// ════════════════════════════════════════════════════════
+function drawBG() {
+  // Deep space gradient
+  const g = ctx.createLinearGradient(0,0,0,H);
+  g.addColorStop(0,'#00070F');
+  g.addColorStop(1,'#060012');
+  ctx.fillStyle = g; ctx.fillRect(0,0,W,H);
+
+  // Nebula blobs
+  [[W*0.2,H*0.3,'#0A1A3A',180],[W*0.75,H*0.6,'#1A0A2E',220],[W*0.5,H*0.15,'#0A1A1A',160]].forEach(([nx,ny,nc,nr])=>{
+    const ng=ctx.createRadialGradient(nx,ny,0,nx,ny,nr);
+    ng.addColorStop(0,nc+'CC'); ng.addColorStop(1,'transparent');
+    ctx.fillStyle=ng; ctx.beginPath(); ctx.arc(nx,ny,nr,0,Math.PI*2); ctx.fill();
+  });
+
+  // Grid lines (subtle)
+  ctx.strokeStyle='rgba(0,255,204,0.03)'; ctx.lineWidth=1;
+  for(let x=0;x<W;x+=60){ctx.beginPath();ctx.moveTo(x,0);ctx.lineTo(x,H);ctx.stroke();}
+  for(let y=0;y<H;y+=60){ctx.beginPath();ctx.moveTo(0,y);ctx.lineTo(W,y);ctx.stroke();}
+
+  // Stars
+  stars.forEach(s=>{
+    const a=s.alpha*(0.5+0.5*Math.sin(s.twinkle));
+    ctx.fillStyle=`rgba(255,255,255,${a})`;
+    ctx.beginPath(); ctx.arc(s.x,s.y,s.r,0,Math.PI*2); ctx.fill();
+  });
+}
+
+// ── Draw Ship ──
+function drawShip() {
+  ctx.save();
+  ctx.translate(ship.x, ship.y);
+  ctx.rotate(ship.angle + Math.PI/2); // +90° so "up" is nose
+
+  const flash = ship.invincible > 0 && Math.floor(ship.invincible/6)%2===0;
+  if (flash) { ctx.restore(); return; }
+
+  // Engine thrust glow
+  const thrustVal = 0.5 + 0.5*Math.sin(ship.thrustAnim);
+  const tGlow = ctx.createRadialGradient(0,26,0,0,26,18);
+  tGlow.addColorStop(0,`rgba(0,180,255,${0.5*thrustVal})`);
+  tGlow.addColorStop(1,'transparent');
+  ctx.fillStyle=tGlow; ctx.beginPath(); ctx.arc(0,26,18,0,Math.PI*2); ctx.fill();
+
+  // Thrust flame
+  ctx.fillStyle=`rgba(0,200,255,${0.3+0.4*thrustVal})`;
+  ctx.beginPath();
+  ctx.moveTo(-7,18);
+  ctx.lineTo(0,26+10*thrustVal);
+  ctx.lineTo(7,18);
+  ctx.closePath(); ctx.fill();
+
+  // Side engine flames
+  [-14,14].forEach(ex=>{
+    ctx.fillStyle=`rgba(0,150,220,${0.2+0.3*thrustVal})`;
+    ctx.beginPath();
+    ctx.moveTo(ex-3,12);
+    ctx.lineTo(ex,18+6*thrustVal);
+    ctx.lineTo(ex+3,12);
+    ctx.closePath(); ctx.fill();
+  });
+
+  // Ship body glow
+  ctx.shadowColor='#00FFCC'; ctx.shadowBlur=16;
+
+  // Main hull
+  ctx.fillStyle='#0A2830';
+  ctx.beginPath();
+  ctx.moveTo(0,-22);       // nose
+  ctx.bezierCurveTo(12,-10,14,4,12,18);
+  ctx.lineTo(6,20);
+  ctx.lineTo(-6,20);
+  ctx.lineTo(-12,18);
+  ctx.bezierCurveTo(-14,4,-12,-10,0,-22);
+  ctx.closePath(); ctx.fill();
+
+  // Hull outline
+  ctx.strokeStyle='#00FFCC'; ctx.lineWidth=1.5;
+  ctx.stroke();
+
+  // Wing left
+  ctx.fillStyle='#062028';
+  ctx.beginPath();
+  ctx.moveTo(-12,4);
+  ctx.lineTo(-26,16);
+  ctx.lineTo(-22,20);
+  ctx.lineTo(-8,16);
+  ctx.closePath(); ctx.fill();
+  ctx.strokeStyle='#00CCAA'; ctx.lineWidth=1; ctx.stroke();
+
+  // Wing right
+  ctx.fillStyle='#062028';
+  ctx.beginPath();
+  ctx.moveTo(12,4);
+  ctx.lineTo(26,16);
+  ctx.lineTo(22,20);
+  ctx.lineTo(8,16);
+  ctx.closePath(); ctx.fill();
+  ctx.strokeStyle='#00CCAA'; ctx.lineWidth=1; ctx.stroke();
+
+  // Cockpit
+  const cg=ctx.createRadialGradient(0,-12,0,0,-12,9);
+  cg.addColorStop(0,'#66FFEE'); cg.addColorStop(0.5,'#00AACC'); cg.addColorStop(1,'#003344');
+  ctx.fillStyle=cg;
+  ctx.beginPath(); ctx.ellipse(0,-12,7,9,0,0,Math.PI*2); ctx.fill();
+  ctx.strokeStyle='#00FFCC'; ctx.lineWidth=1; ctx.stroke();
+
+  // Center stripe
+  ctx.strokeStyle='rgba(0,255,204,0.4)'; ctx.lineWidth=2;
+  ctx.beginPath(); ctx.moveTo(0,-20); ctx.lineTo(0,18); ctx.stroke();
+
+  // Wing glow accents
+  ctx.strokeStyle='rgba(0,255,200,0.35)'; ctx.lineWidth=1;
+  ctx.beginPath(); ctx.moveTo(-14,8); ctx.lineTo(-23,16); ctx.stroke();
+  ctx.beginPath(); ctx.moveTo(14,8);  ctx.lineTo(23,16);  ctx.stroke();
+
+  ctx.shadowBlur=0;
+  ctx.restore();
+}
+
+// ── Draw Enemy ──
+function drawEnemy(e) {
+  ctx.save();
+  ctx.translate(e.x, e.y);
+
+  const bob = Math.sin(e.animPhase)*2.5;
+  ctx.translate(0, bob);
+
+  if (e.hitFlash > 0) {
+    ctx.globalAlpha = 0.4 + Math.random()*0.6;
+  }
+
+  const col = e.type==='elite' ? '#FF6EFF' : e.type==='mid' ? '#FFD93D' : '#00CCFF';
+  const dark= e.type==='elite' ? '#6A0080' : e.type==='mid' ? '#805000' : '#004488';
+
+  ctx.shadowColor=col; ctx.shadowBlur=10;
+
+  if (e.type==='grunt') {
+    // Saucer body
+    ctx.fillStyle=dark;
+    ctx.beginPath(); ctx.ellipse(0,4,22,8,0,0,Math.PI*2); ctx.fill();
+    ctx.fillStyle=col;
+    ctx.beginPath(); ctx.ellipse(0,2,20,7,0,0,Math.PI*2); ctx.fill();
+    // Dome
+    ctx.fillStyle='#88DDFF';
+    ctx.beginPath(); ctx.ellipse(0,-4,10,8,0,0,Math.PI*2); ctx.fill();
+    ctx.strokeStyle=col; ctx.lineWidth=1.5; ctx.stroke();
+    // Lights
+    [-12,-6,0,6,12].forEach(lx=>{
+      ctx.fillStyle=Math.sin(e.animPhase+lx)*0.5>0?'#FFFFFF':col;
+      ctx.beginPath(); ctx.arc(lx,4,2.2,0,Math.PI*2); ctx.fill();
+    });
+    // Glow ring
+    ctx.strokeStyle=col+'66'; ctx.lineWidth=1;
+    ctx.beginPath(); ctx.ellipse(0,3,21,7.5,0,0,Math.PI*2); ctx.stroke();
+  } else if (e.type==='mid') {
+    // Crab-like
+    ctx.fillStyle=dark;
+    ctx.beginPath(); ctx.roundRect(-16,-8,32,18,[4]); ctx.fill();
+    ctx.fillStyle=col;
+    ctx.beginPath(); ctx.roundRect(-14,-7,28,16,[3]); ctx.fill();
+    // Claws
+    [[-18,-2],[-22,4],[18,-2],[22,4]].forEach(([cx,cy])=>{
+      ctx.fillStyle=dark;
+      ctx.beginPath(); ctx.ellipse(cx,cy,4,3,cx<0?-0.5:0.5,0,Math.PI*2); ctx.fill();
+      ctx.strokeStyle=col; ctx.lineWidth=1; ctx.stroke();
+    });
+    // Eyes
+    [-6,6].forEach(ex=>{
+      ctx.fillStyle='#FF2200'; ctx.beginPath(); ctx.arc(ex,-2,3.5,0,Math.PI*2); ctx.fill();
+      ctx.fillStyle='#FF8800'; ctx.beginPath(); ctx.arc(ex+0.5*Math.sign(ex),-2.5,1.5,0,Math.PI*2); ctx.fill();
+    });
+    // Crystal top
+    ctx.fillStyle='#FFE066'; ctx.strokeStyle=col; ctx.lineWidth=1;
+    ctx.beginPath(); ctx.moveTo(-6,-7); ctx.lineTo(0,-16); ctx.lineTo(6,-7); ctx.closePath();
+    ctx.fill(); ctx.stroke();
+  } else {
+    // Elite – angular fighter
+    ctx.fillStyle=dark;
+    ctx.beginPath();
+    ctx.moveTo(0,-18); ctx.lineTo(14,0); ctx.lineTo(10,12);
+    ctx.lineTo(-10,12); ctx.lineTo(-14,0); ctx.closePath(); ctx.fill();
+    ctx.fillStyle=col;
+    ctx.beginPath();
+    ctx.moveTo(0,-15); ctx.lineTo(11,0); ctx.lineTo(8,10);
+    ctx.lineTo(-8,10); ctx.lineTo(-11,0); ctx.closePath(); ctx.fill();
+    // Wings
+    ctx.fillStyle=dark+'CC';
+    ctx.beginPath(); ctx.moveTo(-14,0); ctx.lineTo(-22,10); ctx.lineTo(-10,12); ctx.closePath(); ctx.fill();
+    ctx.beginPath(); ctx.moveTo(14,0);  ctx.lineTo(22,10);  ctx.lineTo(10,12);  ctx.closePath(); ctx.fill();
+    ctx.strokeStyle=col; ctx.lineWidth=1.5;
+    ctx.beginPath(); ctx.moveTo(-14,0); ctx.lineTo(-22,10); ctx.lineTo(-10,12); ctx.closePath(); ctx.stroke();
+    ctx.beginPath(); ctx.moveTo(14,0);  ctx.lineTo(22,10);  ctx.lineTo(10,12);  ctx.closePath(); ctx.stroke();
+    // Core gem
+    const gem=ctx.createRadialGradient(0,-4,0,0,-4,8);
+    gem.addColorStop(0,'#FFFFFF'); gem.addColorStop(0.4,'#FF88FF'); gem.addColorStop(1,col);
+    ctx.fillStyle=gem; ctx.beginPath(); ctx.arc(0,-4,6,0,Math.PI*2); ctx.fill();
+    // Outline
+    ctx.strokeStyle=col; ctx.lineWidth=1.5;
+    ctx.beginPath();
+    ctx.moveTo(0,-18); ctx.lineTo(14,0); ctx.lineTo(10,12);
+    ctx.lineTo(-10,12); ctx.lineTo(-14,0); ctx.closePath(); ctx.stroke();
+    // HP bar
+    if (e.hp > 1) {
+      ctx.fillStyle='rgba(0,0,0,0.5)'; ctx.fillRect(-12,14,24,3);
+      ctx.fillStyle='#FF6EFF'; ctx.fillRect(-12,14,24*(e.hp/2),3);
+    }
+  }
+
+  ctx.shadowBlur=0;
+  ctx.restore();
+}
+
+// ── Draw Bullet ──
+function drawBullet(b, isEnemy) {
+  ctx.save();
+  ctx.shadowColor = isEnemy ? '#FF4444' : '#00FFCC';
+  ctx.shadowBlur  = isEnemy ? 8 : 12;
+  ctx.fillStyle   = isEnemy ? '#FF6666' : (b.triple ? '#FF6EFF' : '#00FFCC');
+  ctx.beginPath();
+  ctx.translate(b.x, b.y);
+  // Elongated in travel direction
+  const ang = Math.atan2(b.vy, b.vx);
+  ctx.rotate(ang);
+  ctx.ellipse(0,0,10,3,0,0,Math.PI*2);
+  ctx.fill();
+  ctx.shadowBlur=0;
+  ctx.restore();
+}
+
+// ── Draw Explosions ──
+function drawExplosions() {
+  explosions.forEach(p=>{
+    ctx.save();
+    ctx.globalAlpha = Math.max(0,p.alpha);
+    if (p.isRing) {
+      ctx.strokeStyle = p.col;
+      ctx.lineWidth   = 2;
+      ctx.shadowColor = p.col; ctx.shadowBlur = 8;
+      ctx.beginPath(); ctx.arc(p.x,p.y,p.r,0,Math.PI*2); ctx.stroke();
+    } else {
+      ctx.fillStyle   = p.col;
+      ctx.shadowColor = p.col; ctx.shadowBlur = p.isMuzzle?6:10;
+      ctx.beginPath(); ctx.arc(p.x,p.y,p.r,0,Math.PI*2); ctx.fill();
+    }
+    ctx.shadowBlur=0;
+    ctx.restore();
+  });
+}
+
+// ── Draw the SHIFT indicator ──
+function drawShiftHint() {
+  const sh = keys['ShiftLeft']||keys['ShiftRight'];
+  ctx.save();
+  ctx.font='bold 11px Orbitron'; ctx.textAlign='center';
+  ctx.fillStyle = sh ? 'rgba(255,110,255,0.9)' : 'rgba(255,255,255,0.18)';
+  if (sh) { ctx.shadowColor='#FF6EFF'; ctx.shadowBlur=10; }
+  ctx.fillText('⟳ ROTATE MODE', W/2, H-10);
+  ctx.shadowBlur=0;
+  ctx.restore();
+}
+
+// ── Draw aim line (subtle direction guide) ──
+function drawAimLine() {
+  const dx = Math.cos(ship.angle);
+  const dy = Math.sin(ship.angle);
+  const len = 60;
+  const g = ctx.createLinearGradient(
+    ship.x+dx*28, ship.y+dy*28,
+    ship.x+dx*(28+len), ship.y+dy*(28+len)
+  );
+  g.addColorStop(0,'rgba(0,255,204,0.5)');
+  g.addColorStop(1,'rgba(0,255,204,0)');
+  ctx.strokeStyle=g; ctx.lineWidth=1; ctx.setLineDash([4,5]);
+  ctx.beginPath();
+  ctx.moveTo(ship.x+dx*28, ship.y+dy*28);
+  ctx.lineTo(ship.x+dx*(28+len), ship.y+dy*(28+len));
+  ctx.stroke();
+  ctx.setLineDash([]);
+}
+
+// ════════════════════════════════════════════════════════
+//  MAIN LOOP
+// ════════════════════════════════════════════════════════
+function draw() {
+  drawBG();
+  enemies.forEach(e=>{ if(e.alive) drawEnemy(e); });
+  drawAimLine();
+  bullets.forEach(b=>drawBullet(b,false));
+  eBullets.forEach(b=>drawBullet(b,true));
+  drawExplosions();
+  drawShip();
+  drawShiftHint();
+}
+
+function loop() {
+  if (state!=='running') return;
+  update();
+  draw();
+  raf = requestAnimationFrame(loop);
+}
+
+// ════════════════════════════════════════════════════════
+//  BUTTONS
+// ════════════════════════════════════════════════════════
+document.getElementById('btn-start').addEventListener('click', startGame);
+document.getElementById('btn-restart').addEventListener('click', restartGame);
+
+// ── Idle draw ──
+initStars();
+(function idleDraw() {
+  drawBG();
+  ctx.save();
+  ctx.translate(W/2,H/2);
+  ctx.rotate(-Math.PI/2);
+  // simplified ship silhouette for start screen
+  ctx.fillStyle='#0A2830'; ctx.strokeStyle='#00FFCC88'; ctx.lineWidth=1.5;
+  ctx.shadowColor='#00FFCC'; ctx.shadowBlur=20;
+  ctx.beginPath();
+  ctx.moveTo(0,-22); ctx.bezierCurveTo(12,-10,14,4,12,18);
+  ctx.lineTo(6,20); ctx.lineTo(-6,20); ctx.lineTo(-12,18);
+  ctx.bezierCurveTo(-14,4,-12,-10,0,-22); ctx.closePath();
+  ctx.fill(); ctx.stroke();
+  ctx.shadowBlur=0;
+  ctx.restore();
+})();
+</script>
+</body>
+</html>
